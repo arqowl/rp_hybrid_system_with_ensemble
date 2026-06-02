@@ -1,6 +1,6 @@
 Analisei o notebook que você enviou e agora consigo responder de forma objetiva.
 
-# 1. Ele segue as 3 etapas do professor?
+1. Ele segue as 3 etapas do professor?
 
 ## Geração ✅
 
