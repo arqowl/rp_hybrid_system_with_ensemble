@@ -17,7 +17,7 @@ import matplotlib.pyplot as plt
 from scipy import stats
 
 from src.dataset_loader import (run_pipeline, datasets_with_pool, load_pool_arrays,
-                                 load_xy, load_oof_train, inverse_target)
+                                 load_xy, load_oof_train, inverse_target, RESULTS_DIR)
 from src.train_pool import run_train_pool, build_pool
 from src.ses_ga_single import run_ses_ga_pipeline, pearson_r_squared
 from src.ses_ga_multi import run_ses_ga_multi_pipeline
@@ -25,7 +25,7 @@ from src.des_dynamic import DynamicEnsembleSelector
 from src.combination import combine_mean
 from src.evaluator import smape, mre, cod
 
-RESULTS = "results"; FIGS = os.path.join(RESULTS, "figuras")
+RESULTS = RESULTS_DIR; FIGS = os.path.join(RESULTS, "figuras")
 CONTROL = "SES-GA-Multi"
 
 
@@ -76,6 +76,11 @@ def _friedman(smape_mat, methods):
 
 def generate():
     os.makedirs(FIGS, exist_ok=True)
+    # limpa figuras antigas para garantir que nada fica desatualizado
+    for _f in os.listdir(FIGS):
+        if _f.endswith(".png"):
+            os.remove(os.path.join(FIGS, _f))
+    print(f"[make_results] gravando em: {os.path.abspath(RESULTS)}")
     methods, bases, per_base, smape_mat, t4 = _predictions()
     avg, F, p, cd, K, N = _friedman(smape_mat, methods)
 
@@ -120,27 +125,41 @@ def generate():
 
 # ─── figuras ──────────────────────────────────────────────────────────────
 def _fig_cd(methods, avg, cd, p, K):
-    N = len(methods); order = np.argsort(avg); lo, hi = 1, N
-    fig, ax = plt.subplots(figsize=(10, 2.8)); ax.set_xlim(lo - .3, hi + .3); ax.set_ylim(0, 1); ax.axis("off")
-    ax.hlines(.75, lo, hi, color="#333")
+    N = len(methods)
+    order = list(np.argsort(avg))           # melhor (menor rank) -> pior
+    lo, hi = 1, N
+    half = (len(order) + 1) // 2            # divide meio-a-meio por POSIÇÃO
+    left, right = order[:half], order[half:]
+    rows = max(len(left), len(right))
+    fig, ax = plt.subplots(figsize=(10, 1.6 + 0.34 * rows))
+    ax.set_xlim(lo - .4, hi + .4); ax.set_ylim(0, 1); ax.axis("off")
+    axis_y = .80
+    ax.hlines(axis_y, lo, hi, color="#333")
     for x in range(1, N + 1):
-        ax.vlines(x, .72, .78, color="#333"); ax.text(x, .83, str(x), ha="center", fontsize=8)
+        ax.vlines(x, axis_y - .02, axis_y + .02, color="#333")
+        ax.text(x, axis_y + .05, str(x), ha="center", fontsize=8)
     cr = avg[methods.index(CONTROL)]
-    ax.hlines(.62, cr, min(cr + cd, hi), color="#c0392b", lw=3)
-    ax.text((cr + min(cr + cd, hi)) / 2, .55, f"CD={cd:.2f}", ha="center", color="#c0392b", fontsize=9)
-    med = np.median(avg)
-    left = [i for i in order if avg[i] <= med]; right = [i for i in order if avg[i] > med]
-    for k, i in enumerate(left):
-        y = .45 - k * .11; ax.plot([avg[i], avg[i]], [.72, y], color="#888", lw=.8); ax.plot([avg[i], lo - .2], [y, y], color="#888", lw=.8)
-        c = "#c0392b" if methods[i] == CONTROL else "#2c3e50"
-        ax.text(lo - .25, y, f"{methods[i]} ({avg[i]:.2f})", ha="right", va="center", fontsize=8, color=c)
-    for k, i in enumerate(right[::-1]):
-        y = .45 - k * .11; ax.plot([avg[i], avg[i]], [.72, y], color="#888", lw=.8); ax.plot([avg[i], hi + .2], [y, y], color="#888", lw=.8)
-        c = "#c0392b" if methods[i] == CONTROL else "#2c3e50"
-        ax.text(hi + .25, y, f"{methods[i]} ({avg[i]:.2f})", ha="left", va="center", fontsize=8, color=c)
+    ax.hlines(axis_y - .08, cr, min(cr + cd, hi), color="#c0392b", lw=3)
+    ax.text((cr + min(cr + cd, hi)) / 2, axis_y - .13, f"CD={cd:.2f}",
+            ha="center", color="#c0392b", fontsize=9)
+    step = (axis_y - .18) / max(rows, 1)
+
+    def draw(side, anchor, ha):
+        for k, i in enumerate(side):
+            y = axis_y - .18 - k * step
+            ax.plot([avg[i], avg[i]], [axis_y, y], color="#888", lw=.8)
+            ax.plot([avg[i], anchor], [y, y], color="#888", lw=.8)
+            c = "#c0392b" if methods[i] == CONTROL else "#2c3e50"
+            ax.text(anchor + (-.1 if ha == "right" else .1), y,
+                    f"{methods[i]} ({avg[i]:.2f})", ha=ha, va="center",
+                    fontsize=8.5, color=c)
+    draw(left, lo - .3, "right")
+    draw(right, hi + .3, "left")
     ax.set_title(f"Diagrama de Diferença Crítica (Friedman p={p:.3f}, {K} bases)\n"
-                 f"Métodos a menos de CD do controle ({CONTROL}) não diferem significativamente", fontsize=9)
-    plt.tight_layout(); plt.savefig(os.path.join(FIGS, "1_diagrama_diferenca_critica.png"), dpi=150, bbox_inches="tight"); plt.close()
+                 f"Métodos a menos de CD do controle ({CONTROL}) não diferem significativamente",
+                 fontsize=9)
+    plt.tight_layout(); plt.savefig(os.path.join(FIGS, "1_diagrama_diferenca_critica.png"),
+                                    dpi=150, bbox_inches="tight"); plt.close()
 
 
 def _fig_ranks(methods, avg):

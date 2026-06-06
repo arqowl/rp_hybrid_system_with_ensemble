@@ -39,7 +39,7 @@ from src.ses_ga_single import (
     RANDOM_STATE,
 )
 
-RESULTS_DIR = "results"
+from src.dataset_loader import RESULTS_DIR   # ancorado na raiz do projeto
 
 
 # ─── Dominância de Pareto ─────────────────────────────────────────────────────

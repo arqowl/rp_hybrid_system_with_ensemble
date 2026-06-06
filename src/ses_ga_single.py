@@ -32,7 +32,7 @@ import numpy as np
 
 # ─── Configuração ────────────────────────────────────────────────────────────
 RANDOM_STATE = 42
-RESULTS_DIR = "results"
+from src.dataset_loader import RESULTS_DIR   # ancorado na raiz do projeto
 
 
 # ─── Função de Fitness: R² / COD ─────────────────────────────────────────────

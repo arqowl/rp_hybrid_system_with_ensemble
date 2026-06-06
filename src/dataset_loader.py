@@ -54,9 +54,12 @@ RANDOM_STATE = 42
 TEST_SIZE = 0.30
 LOG_TARGET = False  # fidelidade ao artigo: MinMax no esforço cru (sem log)
 
-# Diretórios (relativos à raiz do projeto)
-RAW_DIR = os.path.join("data", "raw")
-OUT_DIR = os.path.join("data", "processed")
+# Diretórios ANCORADOS na raiz do projeto (pasta que contém src/),
+# para funcionar independentemente do diretório de execução.
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+RAW_DIR = os.path.join(PROJECT_ROOT, "data", "raw")
+OUT_DIR = os.path.join(PROJECT_ROOT, "data", "processed")
+RESULTS_DIR = os.path.join(PROJECT_ROOT, "results")
 
 # ─── Registro das 5 bases ────────────────────────────────────────────────────
 # target_candidates : nomes possíveis do alvo (comparação por nome normalizado)
@@ -130,7 +133,23 @@ def _find_target(df: pd.DataFrame, candidates: list[str]) -> str | None:
 
 # ─── Leitura crua ────────────────────────────────────────────────────────────
 def raw_path(name: str) -> str:
-    return os.path.join(RAW_DIR, DATASETS[name]["file"])
+    """Resolve o arquivo da base em data/raw/, tolerante a variações de nome.
+
+    Tenta o nome exato configurado; se não existir, procura qualquer arquivo
+    com a extensão certa cujo nome normalizado contenha a chave da base
+    (ex.: '02.desharnais.csv', 'Desharnais.CSV' → casam com 'desharnais').
+    """
+    cfg = DATASETS[name]
+    exact = os.path.join(RAW_DIR, cfg["file"])
+    if os.path.exists(exact):
+        return exact
+    ext = cfg["fmt"]
+    key = _norm(name)
+    if os.path.isdir(RAW_DIR):
+        for fn in sorted(os.listdir(RAW_DIR)):
+            if fn.lower().endswith("." + ext) and key in _norm(fn):
+                return os.path.join(RAW_DIR, fn)
+    return exact  # mantém o caminho padrão p/ a mensagem de erro
 
 
 def is_available(name: str) -> bool:
