@@ -1,5 +1,5 @@
 {
-    "name": "Telemetric template",
+    "name": "Ensemble de sistema híbrido",
     "image": "pytorch/pytorch:2.1.0-cuda11.8-cudnn8-runtime",
     // Instala o Git e ferramentas essenciais direto no sistema operacional do container
     "features": {

@@ -216,3 +216,14 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Ignora dados e arquivos pesados
+data/
+zips/
+*.zip
+*.csv
+*.arff
+
+# Ignora caches do Python
+__pycache__/
+.ipynb_checkpoints/
