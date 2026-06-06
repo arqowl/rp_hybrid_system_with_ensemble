@@ -52,6 +52,7 @@ from sklearn.preprocessing import MinMaxScaler
 # ─── Configuração global ─────────────────────────────────────────────────────
 RANDOM_STATE = 42
 TEST_SIZE = 0.30
+LOG_TARGET = False  # fidelidade ao artigo: MinMax no esforço cru (sem log)
 
 # Diretórios (relativos à raiz do projeto)
 RAW_DIR = os.path.join("data", "raw")
@@ -197,8 +198,13 @@ def preprocess(df: pd.DataFrame, cfg: dict, name: str) -> dict:
     sx, sy = MinMaxScaler(), MinMaxScaler()
     X_tr_s = sx.fit_transform(X_tr)
     X_te_s = sx.transform(X_te)
-    y_tr_s = sy.fit_transform(y_tr.reshape(-1, 1)).ravel()
-    y_te_s = sy.transform(y_te.reshape(-1, 1)).ravel()
+
+    # Log-target: o esforço é fortemente assimétrico (skewness ~3.7 no artigo).
+    # Modelamos log1p(esforço) e depois MinMax. y_*_raw guardam o esforço original.
+    y_tr_m = np.log1p(y_tr) if LOG_TARGET else y_tr
+    y_te_m = np.log1p(y_te) if LOG_TARGET else y_te
+    y_tr_s = sy.fit_transform(y_tr_m.reshape(-1, 1)).ravel()
+    y_te_s = sy.transform(y_te_m.reshape(-1, 1)).ravel()
 
     return {
         "name": name,
@@ -317,6 +323,21 @@ def load_xy(name: str) -> tuple:
         np.load(f"{p}_y_train.npy"),
         np.load(f"{p}_y_test.npy"),
     )
+
+
+def load_oof_train(name: str) -> np.ndarray:
+    """Matriz de predições OUT-OF-FOLD do treino (gerada pelo train_pool)."""
+    return np.load(os.path.join(OUT_DIR, f"{name}_pred_matrix_train_oof.npy"))
+
+
+def inverse_target(name: str, y_norm: np.ndarray) -> np.ndarray:
+    """Converte predição (espaço normalizado/log) de volta para esforço original."""
+    y_norm = np.asarray(y_norm, dtype=float)
+    ytr_raw = np.load(os.path.join(OUT_DIR, f"{name}_y_train_raw.npy"))
+    base = np.log1p(ytr_raw) if LOG_TARGET else ytr_raw
+    lo, hi = float(base.min()), float(base.max())
+    m = y_norm * (hi - lo) + lo
+    return np.expm1(m) if LOG_TARGET else m
 
 
 def run_pipeline(verbose: bool = True) -> dict[str, dict]:

@@ -1,0 +1,28 @@
+Teste de Friedman (metrica: sMAPE; 4 bases x 9 metodos)
+  Estatistica F = 9.2000
+  p-valor       = 0.325706
+  Significativo (p<0.05): NAO
+
+Post-hoc Bonferroni-Dunn (controle = SES-GA-Multi)
+  CD = 5.2951
+
+Ranks medios (menor = melhor):
+  DES            3.250
+  kNN            3.750
+  SES-GA         4.000
+  Static         4.000
+  DT             4.250
+  SES-GA-Multi   5.750
+  MLP            6.000
+  LR             6.500
+  SVR            7.500
+
+Diferencas vs SES-GA-Multi (|diff| > CD = significativo):
+  DES            |diff|=2.500  n.s.
+  kNN            |diff|=2.000  n.s.
+  SES-GA         |diff|=1.750  n.s.
+  Static         |diff|=1.750  n.s.
+  DT             |diff|=1.500  n.s.
+  MLP            |diff|=0.250  n.s.
+  LR             |diff|=0.750  n.s.
+  SVR            |diff|=1.750  n.s.

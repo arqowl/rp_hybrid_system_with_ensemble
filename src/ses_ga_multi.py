@@ -352,18 +352,19 @@ def _to_jsonable(obj):
 
 def run_ses_ga_multi_pipeline(verbose: bool = True) -> dict:
     """Roda o SES-GA multi-objetivo (R² × parcimônia) em todas as bases (T2)."""
-    from src.dataset_loader import datasets_with_pool, load_pool_arrays
+    from src.dataset_loader import datasets_with_pool, load_pool_arrays, load_oof_train
 
     print("=" * 60)
-    print("  T4 — SES-GA multi-objetivo (R² × parcimônia) — NSGA-II")
+    print("  T4 — SES-GA multi-objetivo (R² × parcimônia) — NSGA-II, seleção OOF")
     print("=" * 60)
     os.makedirs(RESULTS_DIR, exist_ok=True)
 
     results = {}
     for dname in datasets_with_pool():
-        pred_train, pred_test, y_train, y_test = load_pool_arrays(dname)
+        _, pred_test, y_train, y_test = load_pool_arrays(dname)
+        pred_oof = load_oof_train(dname)            # fitness em OOF (sem vazamento)
         print(f"\n── {dname.upper()} ──")
-        res = run_ses_ga_multi(pred_train, y_train, pred_test, y_test, verbose=verbose)
+        res = run_ses_ga_multi(pred_oof, y_train, pred_test, y_test, verbose=verbose)
         results[dname] = res
         out = os.path.join(RESULTS_DIR, f"{dname}_ses_ga_multi.json")
         with open(out, "w", encoding="utf-8") as f:

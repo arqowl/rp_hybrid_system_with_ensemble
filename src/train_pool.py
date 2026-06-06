@@ -44,31 +44,33 @@ import json
 import numpy as np
 
 from sklearn.svm import SVR
+from sklearn.model_selection import cross_val_predict, KFold
 from sklearn.neural_network import MLPRegressor
 from sklearn.neighbors import KNeighborsRegressor
 from sklearn.tree import DecisionTreeRegressor
-from sklearn.linear_model import LinearRegression, Ridge, Lasso, ElasticNet
+from sklearn.linear_model import LinearRegression
 
 from src.dataset_loader import RANDOM_STATE, OUT_DIR, load_all
 
 
 # ─── Definição do pool (apenas modelos individuais) ──────────────────────────
 def build_pool() -> dict:
-    """Retorna {sigla: estimador} — paradigmas diversos, nenhum ensemble."""
+    """Retorna {sigla: estimador} — paradigmas diversos, nenhum ensemble.
+
+    5 modelos, um por paradigma de aprendizado (diversidade real):
+        LR  — linear, eager, paramétrico
+        SVR — margem/kernel RBF, eager, não-linear
+        MLP — conexionista (rede neural), eager
+        kNN — baseado em instâncias, lazy
+        DT  — baseado em árvore (partição por regras)
+    """
     return {
-        # eager
+        "LR":  LinearRegression(),
         "SVR": SVR(kernel="rbf", C=10.0, gamma="scale"),
         "MLP": MLPRegressor(hidden_layer_sizes=(64,), activation="relu",
                             learning_rate_init=0.01, max_iter=800,
                             random_state=RANDOM_STATE),
-        "LR":  LinearRegression(),
-        "Ridge": Ridge(alpha=1.0, random_state=RANDOM_STATE),
-        "Lasso": Lasso(alpha=0.001, max_iter=5000, random_state=RANDOM_STATE),
-        "ElasticNet": ElasticNet(alpha=0.001, l1_ratio=0.5, max_iter=5000,
-                                 random_state=RANDOM_STATE),
-        # lazy
         "kNN": KNeighborsRegressor(n_neighbors=5),
-        # árvore rasa
         "DT":  DecisionTreeRegressor(max_depth=4, random_state=RANDOM_STATE),
     }
 
@@ -92,12 +94,18 @@ def train_pool(X_train: np.ndarray, y_train: np.ndarray,
     names = list(pool.keys())
     M = len(names)
     pm_train = np.zeros((X_train.shape[0], M), dtype=np.float64)
+    pm_train_oof = np.zeros((X_train.shape[0], M), dtype=np.float64)
     pm_test = np.zeros((X_test.shape[0], M), dtype=np.float64)
     trained = {}
 
+    cv = KFold(n_splits=5, shuffle=True, random_state=RANDOM_STATE)
     if verbose:
-        print(f"[T2] {dataset_name:<11} treinando {M} modelos...", end="")
+        print(f"[T2] {dataset_name:<11} treinando {M} modelos (+OOF 5-fold)...", end="")
     for i, (name, model) in enumerate(pool.items()):
+        # Predições OUT-OF-FOLD para a SELEÇÃO (cada linha prevista por modelo
+        # que NÃO a treinou) — evita o vazamento de selecionar no proprio treino.
+        pm_train_oof[:, i] = cross_val_predict(model, X_train, y_train, cv=cv)
+        # Modelo final treinado em todo o treino → predições de treino e teste
         model.fit(X_train, y_train)
         pm_train[:, i] = model.predict(X_train)   # SEM clip
         pm_test[:, i] = model.predict(X_test)
@@ -109,6 +117,7 @@ def train_pool(X_train: np.ndarray, y_train: np.ndarray,
         "model_names": names,
         "models": trained,
         "pred_matrix_train": pm_train,
+        "pred_matrix_train_oof": pm_train_oof,
         "pred_matrix_test": pm_test,
     }
 
@@ -118,6 +127,7 @@ def save_matrices(name: str, result: dict):
     os.makedirs(OUT_DIR, exist_ok=True)
     p = os.path.join(OUT_DIR, name)
     np.save(f"{p}_pred_matrix_train.npy", result["pred_matrix_train"])
+    np.save(f"{p}_pred_matrix_train_oof.npy", result["pred_matrix_train_oof"])
     np.save(f"{p}_pred_matrix_test.npy", result["pred_matrix_test"])
 
 
