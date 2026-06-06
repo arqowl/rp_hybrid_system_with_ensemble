@@ -28,7 +28,7 @@ import time
 import numpy as np
 
 # Reutiliza funções de T3 (parcimônia — evita duplicação de código)
-from ses_ga_single import (
+from src.ses_ga_single import (
     pearson_r_squared,
     r_squared,
     ensemble_predict,
@@ -339,80 +339,40 @@ def run_ses_ga_multi(pred_matrix_train: np.ndarray,
         }
     }
 
-
 # ─── Pipeline principal ──────────────────────────────────────────────────────
-def run_ses_ga_multi_pipeline():
-    from train_pool import matrix_mock
+def _to_jsonable(obj):
+    if isinstance(obj, np.integer):
+        return int(obj)
+    if isinstance(obj, np.floating):
+        return float(obj)
+    if isinstance(obj, np.ndarray):
+        return obj.tolist()
+    return obj
+
+
+def run_ses_ga_multi_pipeline(verbose: bool = True) -> dict:
+    """Roda o SES-GA multi-objetivo (R² × parcimônia) em todas as bases (T2)."""
+    from src.dataset_loader import datasets_with_pool, load_pool_arrays
 
     print("=" * 60)
-    print("  T4 — Algoritmo Genético Multi-Objetivo (R² × Parcimônia)")
+    print("  T4 — SES-GA multi-objetivo (R² × parcimônia) — NSGA-II")
     print("=" * 60)
-
     os.makedirs(RESULTS_DIR, exist_ok=True)
 
-    datasets = ["finnish", "maxwell"]
-
-    for dname in datasets:
-        print(f"\n{'─'*50}")
-        print(f"  Dataset: {dname.upper()}")
-        print(f"{'─'*50}")
-
-        train_path = os.path.join("data", f"{dname}_pred_matrix_train.npy")
-        test_path  = os.path.join("data", f"{dname}_pred_matrix_test.npy")
-        y_train_path = os.path.join("data", f"{dname}_y_train.npy")
-        y_test_path  = os.path.join("data", f"{dname}_y_test.npy")
-
-        if os.path.exists(train_path):
-            pred_train = np.load(train_path)
-            pred_test  = np.load(test_path)
-            y_train    = np.load(y_train_path)
-            y_test     = np.load(y_test_path)
-            print("  → Matrizes reais carregadas de T2.")
-        else:
-            n_train = 283 if dname == "finnish" else 43
-            n_test  = 122 if dname == "finnish" else 19
-            pred_train = matrix_mock(n_train)
-            pred_test  = matrix_mock(n_test, random_state=RANDOM_STATE + 99)
-            rng_t = np.random.default_rng(RANDOM_STATE)
-            y_train = rng_t.uniform(0, 1, size=n_train)
-            y_test  = rng_t.uniform(0, 1, size=n_test)
-            print("  → Usando matrizes MOCK (T2 ainda não executado).")
-
-        result = run_ses_ga_multi(
-            pred_matrix_train=pred_train,
-            y_train=y_train,
-            pred_matrix_test=pred_test,
-            y_test=y_test,
-        )
-
-        # Salva resultados
-        out_json = os.path.join(RESULTS_DIR, f"{dname}_ses_ga_multi.json")
-        result_serializable = {
-            k: v for k, v in result.items()
-            if k not in ("pareto_front",)
-        }
-        result_serializable["pareto_front"] = result["pareto_front"]
-        with open(out_json, "w") as f:
-            json.dump(result_serializable, f, indent=2)
-        print(f"  → Resultado salvo: {out_json}")
-
-        # Salva frente de Pareto como NPY
-        pareto_arr = np.array(result["pareto_front"])
-        out_npy = os.path.join(RESULTS_DIR, f"{dname}_pareto_front.npy")
-        np.save(out_npy, pareto_arr)
-        print(f"  → Frente de Pareto salva: {out_npy}  shape={pareto_arr.shape}")
-
-    print("\n[T4] ✓ SES-GA Multi-objetivo concluído!")
+    results = {}
+    for dname in datasets_with_pool():
+        pred_train, pred_test, y_train, y_test = load_pool_arrays(dname)
+        print(f"\n── {dname.upper()} ──")
+        res = run_ses_ga_multi(pred_train, y_train, pred_test, y_test, verbose=verbose)
+        results[dname] = res
+        out = os.path.join(RESULTS_DIR, f"{dname}_ses_ga_multi.json")
+        with open(out, "w", encoding="utf-8") as f:
+            json.dump(json.loads(json.dumps(res, default=_to_jsonable)), f, indent=2)
+        np.save(os.path.join(RESULTS_DIR, f"{dname}_pareto_front.npy"),
+                np.array(res["pareto_front"]))
+    print(f"\n[T4] ✓ SES-GA-multi em {len(results)} base(s) → {RESULTS_DIR}/")
+    return results
 
 
 if __name__ == "__main__":
-    if not os.path.exists(os.path.join("data", "finnish_train.csv")):
-        print("[T4] Executando T1 primeiro...")
-        from dataset_loader import run_pipeline
-        run_pipeline()
-    if not os.path.exists(os.path.join("data", "finnish_pred_matrix_train.npy")):
-        print("[T4] Executando T2 primeiro...")
-        from train_pool import run_train_pool
-        run_train_pool()
-
     run_ses_ga_multi_pipeline()

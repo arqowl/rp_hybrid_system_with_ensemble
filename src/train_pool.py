@@ -1,303 +1,169 @@
 """
-T2 - Geração do Pool de Modelos Base
-Responsável: M | Apoio: A
+T2 — Geração do Pool de Modelos Base
+====================================
 
-Descrição:
-    Treina todos os regressores do pool (Tabela 3 do artigo) sobre o
-    conjunto de treino e gera a Matriz Gabarito de treino.
+Treina o pool de regressores INDIVIDUAIS (sem ensembles) sobre cada base e
+gera as "Matrizes Gabarito": as predições de cada modelo no treino e no teste.
+Essas matrizes alimentam a Seleção (SES-GA / DES) e a Combinação.
 
-    Matriz Gabarito: array NumPy de shape (N_train, M_models)
-        - Cada coluna = predições de um modelo sobre o treino
-        - Usada pela Seleção Dinâmica (T5) para medir competência local
+Por que o pool NÃO tem ensembles
+--------------------------------
+Random Forest, XGBoost, AdaBoost, Bagging, ExtraTrees etc. já SÃO ensembles.
+Colocá-los como base de outro ensemble não faz sentido (alerta do professor).
+O pool é montado por PARADIGMA de aprendizado, garantindo diversidade real:
 
-Entregáveis:
-    models/finnish_pool/   ← modelos .joblib
-    models/maxwell_pool/   ← modelos .joblib
-    data/finnish_pred_matrix_train.npy
-    data/maxwell_pred_matrix_train.npy
-    data/finnish_pred_matrix_test.npy
-    data/maxwell_pred_matrix_test.npy
-    data/pool_registry.json ← contrato de interface para T5
+    eager (modelo paramétrico ajustado no treino):
+        SVR (kernel RBF), MLP (rede neural), Linear, Ridge, Lasso, ElasticNet
+    lazy (baseado em instâncias):
+        kNN
+    árvore rasa:
+        DecisionTree (profundidade limitada)
 
-Autonomia de A (T5):
-    Enquanto T2 não estiver pronto, A usa matrix_mock() para
-    criar uma Matriz Gabarito fictícia com a mesma estrutura.
+Os regressores-base vêm do scikit-learn; TODO o mecanismo de seleção,
+combinação e validação estatística é de implementação própria (NumPy).
+
+Diferença em relação ao código antigo
+-------------------------------------
+- Sem RF/XGB/CatBoost/Bagging/ExtraTrees/GaussianNB.
+- Sem np.clip(pred, 0, 1): como o MinMax é ajustado só no treino, predições no
+  teste podem legitimamente cair fora de [0,1]; clipar distorceria o erro.
+- Lê o contrato de dados de src.dataset_loader (fonte única de verdade), em vez
+  de CSVs de um loader paralelo.
+
+API pública
+-----------
+    build_pool() -> dict[str, estimator]
+    train_pool(X_train, y_train, X_test) -> dict (modelos + matrizes)
+    run_train_pool(verbose) -> dict[name -> resultado]   # todas as bases
 """
+
+from __future__ import annotations
 
 import os
 import json
-import joblib
 import numpy as np
-import pandas as pd
+
 from sklearn.svm import SVR
-from sklearn.ensemble import (
-    RandomForestRegressor, AdaBoostRegressor,
-    BaggingRegressor, ExtraTreesRegressor,
-    GradientBoostingRegressor
-)
 from sklearn.neural_network import MLPRegressor
 from sklearn.neighbors import KNeighborsRegressor
 from sklearn.tree import DecisionTreeRegressor
-from sklearn.linear_model import LinearRegression
-from sklearn.naive_bayes import GaussianNB
-from xgboost import XGBRegressor
-from catboost import CatBoostRegressor
+from sklearn.linear_model import LinearRegression, Ridge, Lasso, ElasticNet
 
-# ─── Configuração ────────────────────────────────────────────────────────────
-RANDOM_STATE = 42
-DATA_DIR = "data"
-MODELS_DIR = "models"
+from src.dataset_loader import RANDOM_STATE, OUT_DIR, load_all
 
-# ─── Definição do Pool (Tabela 3 do artigo) ──────────────────────────────────
+
+# ─── Definição do pool (apenas modelos individuais) ──────────────────────────
 def build_pool() -> dict:
-    """
-    Retorna dicionário {sigla: instância do regressor} conforme Tabela 3.
-    Parâmetros exatamente como descritos no artigo.
-    """
-    pool = {
-        "SVM": SVR(kernel="rbf"),                               # kernel=rbf
-        "RF":  RandomForestRegressor(n_estimators=10,
-                                     min_samples_leaf=1,
-                                     random_state=RANDOM_STATE),
-        "MLP": MLPRegressor(hidden_layer_sizes=(100,),
-                            learning_rate_init=0.01,
-                            max_iter=500,
+    """Retorna {sigla: estimador} — paradigmas diversos, nenhum ensemble."""
+    return {
+        # eager
+        "SVR": SVR(kernel="rbf", C=10.0, gamma="scale"),
+        "MLP": MLPRegressor(hidden_layer_sizes=(64,), activation="relu",
+                            learning_rate_init=0.01, max_iter=800,
                             random_state=RANDOM_STATE),
-        "kNN": KNeighborsRegressor(n_neighbors=5),              # k=3/5/7 → 5 default
-        "DT":  DecisionTreeRegressor(criterion="squared_error",
-                                     max_depth=2,
-                                     random_state=RANDOM_STATE),
-        "ET":  ExtraTreesRegressor(n_estimators=100,
-                                   min_samples_leaf=1,
-                                   random_state=RANDOM_STATE),
         "LR":  LinearRegression(),
-        "ADA": AdaBoostRegressor(n_estimators=10,
+        "Ridge": Ridge(alpha=1.0, random_state=RANDOM_STATE),
+        "Lasso": Lasso(alpha=0.001, max_iter=5000, random_state=RANDOM_STATE),
+        "ElasticNet": ElasticNet(alpha=0.001, l1_ratio=0.5, max_iter=5000,
                                  random_state=RANDOM_STATE),
-        "CAT": CatBoostRegressor(iterations=10,
-                                 learning_rate=1,
-                                 depth=2,
-                                 verbose=0,
-                                 random_state=RANDOM_STATE),
-        "XGB": XGBRegressor(n_estimators=50,
-                            max_depth=3,
-                            eta=0.1,
-                            verbosity=0,
-                            random_state=RANDOM_STATE),
-        "NB":  GaussianNB(),                                     # Naive Bayes
-        "BG":  BaggingRegressor(n_estimators=10,
-                                random_state=RANDOM_STATE),
+        # lazy
+        "kNN": KNeighborsRegressor(n_neighbors=5),
+        # árvore rasa
+        "DT":  DecisionTreeRegressor(max_depth=4, random_state=RANDOM_STATE),
     }
-    return pool
 
 
-# ─── Mock para autonomia de A ────────────────────────────────────────────────
-def matrix_mock(n_instances: int, m_models: int = 12,
-                random_state: int = RANDOM_STATE) -> np.ndarray:
-    """
-    Gera uma Matriz Gabarito fictícia com a mesma estrutura da real.
-    Usada por A (T5) para desenvolver o DES de forma independente.
-
-    Args:
-        n_instances: número de instâncias de treino (N_train)
-        m_models: número de modelos no pool (padrão=12)
-        random_state: semente para reprodutibilidade
-
-    Returns:
-        np.ndarray de shape (n_instances, m_models), dtype=float64
-        valores em [0, 1] simulando predições normalizadas
-    """
-    rng = np.random.default_rng(random_state)
-    # Simula predições com correlação moderada (mais realista que ruído puro)
-    base = rng.uniform(0, 1, size=n_instances)
-    noise = rng.normal(0, 0.15, size=(n_instances, m_models))
-    matrix = np.clip(base[:, None] + noise, 0, 1)
-    return matrix.astype(np.float64)
-
-
-# ─── Treinamento do Pool ──────────────────────────────────────────────────────
+# ─── Treinamento e geração das matrizes gabarito ─────────────────────────────
 def train_pool(X_train: np.ndarray, y_train: np.ndarray,
-               X_test: np.ndarray, dataset_name: str) -> dict:
+               X_test: np.ndarray, dataset_name: str = "",
+               verbose: bool = True) -> dict:
     """
-    Treina cada modelo do pool e retorna:
-        - modelos treinados
-        - Matriz Gabarito de treino: shape (N_train, M_models)
-        - Matriz de predições de teste: shape (N_test, M_models)
+    Treina cada modelo do pool e retorna as predições no treino e no teste.
+
+    Returns
+    -------
+    dict com:
+        model_names        : list[str]
+        models             : dict[str, estimator] treinados
+        pred_matrix_train  : (N_train, M) predições no treino
+        pred_matrix_test   : (N_test,  M) predições no teste
     """
     pool = build_pool()
-    model_names = list(pool.keys())
-    M = len(model_names)
-    N_train = X_train.shape[0]
-    N_test = X_test.shape[0]
+    names = list(pool.keys())
+    M = len(names)
+    pm_train = np.zeros((X_train.shape[0], M), dtype=np.float64)
+    pm_test = np.zeros((X_test.shape[0], M), dtype=np.float64)
+    trained = {}
 
-    pred_matrix_train = np.zeros((N_train, M), dtype=np.float64)
-    pred_matrix_test = np.zeros((N_test, M), dtype=np.float64)
-    trained_models = {}
-
-    print(f"\n[T2] Treinando pool para {dataset_name} ({M} modelos)...")
-
-    # Cria diretório de modelos
-    model_dir = os.path.join(MODELS_DIR, f"{dataset_name}_pool")
-    os.makedirs(model_dir, exist_ok=True)
-
+    if verbose:
+        print(f"[T2] {dataset_name:<11} treinando {M} modelos...", end="")
     for i, (name, model) in enumerate(pool.items()):
-        try:
-            model.fit(X_train, y_train)
-
-            pred_train = model.predict(X_train)
-            pred_test = model.predict(X_test)
-
-            # Clipa para [0,1] — dados já normalizados pelo MinMax
-            pred_matrix_train[:, i] = np.clip(pred_train, 0, 1)
-            pred_matrix_test[:, i] = np.clip(pred_test, 0, 1)
-
-            trained_models[name] = model
-
-            # Salva modelo como .joblib
-            model_path = os.path.join(model_dir, f"{name}.joblib")
-            joblib.dump(model, model_path)
-
-            print(f"  [{i+1:02d}/{M}] {name:<5} ✓  (salvo em {model_path})")
-
-        except Exception as e:
-            print(f"  [{i+1:02d}/{M}] {name:<5} ✗  ERRO: {e}")
-            # Preenche coluna com mock se modelo falhar
-            pred_matrix_train[:, i] = matrix_mock(N_train, 1,
-                                                   RANDOM_STATE + i).ravel()
-            pred_matrix_test[:, i] = matrix_mock(N_test, 1,
-                                                  RANDOM_STATE + i + 100).ravel()
+        model.fit(X_train, y_train)
+        pm_train[:, i] = model.predict(X_train)   # SEM clip
+        pm_test[:, i] = model.predict(X_test)
+        trained[name] = model
+    if verbose:
+        print(" ok")
 
     return {
-        "models": trained_models,
-        "model_names": model_names,
-        "pred_matrix_train": pred_matrix_train,
-        "pred_matrix_test": pred_matrix_test,
-        "model_dir": model_dir,
+        "model_names": names,
+        "models": trained,
+        "pred_matrix_train": pm_train,
+        "pred_matrix_test": pm_test,
     }
 
 
-# ─── Salvar matrizes e registro ───────────────────────────────────────────────
-def save_artifacts(result: dict, dataset_name: str,
-                   y_train: np.ndarray, y_test: np.ndarray):
-    """Salva as matrizes NumPy e o registro do pool."""
-    prefix = os.path.join(DATA_DIR, dataset_name)
-
-    train_path = f"{prefix}_pred_matrix_train.npy"
-    test_path = f"{prefix}_pred_matrix_test.npy"
-    y_train_path = f"{prefix}_y_train.npy"
-    y_test_path = f"{prefix}_y_test.npy"
-
-    np.save(train_path, result["pred_matrix_train"])
-    np.save(test_path, result["pred_matrix_test"])
-    np.save(y_train_path, y_train)
-    np.save(y_test_path, y_test)
-
-    shape_train = result["pred_matrix_train"].shape
-    shape_test = result["pred_matrix_test"].shape
-    print(f"  → Matriz Gabarito treino:  {train_path}  shape={shape_train}")
-    print(f"  → Matriz Gabarito teste:   {test_path}   shape={shape_test}")
-
-    return {
-        "train_matrix": train_path,
-        "test_matrix": test_path,
-        "y_train": y_train_path,
-        "y_test": y_test_path,
-        "shape_train": list(shape_train),
-        "shape_test": list(shape_test),
-    }
+# ─── Persistência ────────────────────────────────────────────────────────────
+def save_matrices(name: str, result: dict):
+    os.makedirs(OUT_DIR, exist_ok=True)
+    p = os.path.join(OUT_DIR, name)
+    np.save(f"{p}_pred_matrix_train.npy", result["pred_matrix_train"])
+    np.save(f"{p}_pred_matrix_test.npy", result["pred_matrix_test"])
 
 
-def save_pool_registry(finnish_info: dict, maxwell_info: dict,
-                       finnish_result: dict, maxwell_result: dict):
-    """
-    Gera pool_registry.json — contrato de interface para T5 (DES).
-    Define exatamente onde estão as matrizes e os modelos.
-    """
+def save_registry(all_results: dict[str, dict]):
+    os.makedirs(OUT_DIR, exist_ok=True)
+    any_res = next(iter(all_results.values()))
     registry = {
-        "contract_version": "1.0",
-        "description": "Contrato T2 → T5. Pool de modelos treinados e Matrizes Gabarito.",
-        "model_siglas": finnish_result["model_names"],
-        "mock_function": "from train_pool import matrix_mock",
-        "mock_usage": "matrix_mock(n_instances, m_models=12) → np.ndarray (N, M)",
-        "datasets": {
-            "finnish": finnish_info,
-            "maxwell": maxwell_info,
-        },
+        "contract_version": "2.0",
+        "model_siglas": any_res["model_names"],
+        "note": "modelos individuais (sem ensembles); predições NÃO clipadas",
         "matrix_format": {
             "shape": "(N_instances, M_models)",
             "dtype": "float64",
-            "values": "predições MinMax-normalizadas [0, 1]",
-            "axis_0": "instâncias",
-            "axis_1": "modelos na ordem: " + str(finnish_result["model_names"]),
-        }
+            "axis_0": "instâncias", "axis_1": "modelos",
+        },
+        "datasets": {
+            name: {
+                "n_models": len(r["model_names"]),
+                "shape_train": list(r["pred_matrix_train"].shape),
+                "shape_test": list(r["pred_matrix_test"].shape),
+            } for name, r in all_results.items()
+        },
     }
-    path = os.path.join(DATA_DIR, "pool_registry.json")
-    with open(path, "w", encoding="utf-8") as f:
+    with open(os.path.join(OUT_DIR, "pool_registry.json"), "w", encoding="utf-8") as f:
         json.dump(registry, f, indent=2, ensure_ascii=False)
-    print(f"\n[T2] Contrato de interface salvo: {path}")
 
 
 # ─── Pipeline principal ──────────────────────────────────────────────────────
-def run_train_pool():
-    """
-    Executa T2 completo.
-    Depende dos CSVs gerados por T1 (dataset_loader.py).
-    """
-    print("=" * 60)
-    print("  T2 — Geração do Pool de Modelos Base")
-    print("=" * 60)
-
-    os.makedirs(MODELS_DIR, exist_ok=True)
-
-    # Carrega dados produzidos por T1
-    datasets = {
-        "finnish": {
-            "train": os.path.join(DATA_DIR, "finnish_train.csv"),
-            "test":  os.path.join(DATA_DIR, "finnish_test.csv"),
-            "target": "Worksup",
-        },
-        "maxwell": {
-            "train": os.path.join(DATA_DIR, "maxwell_train.csv"),
-            "test":  os.path.join(DATA_DIR, "maxwell_test.csv"),
-            "target": "Effort",
-        },
-    }
-
-    registry_data = {}
-    for dname, paths in datasets.items():
-        train_df = pd.read_csv(paths["train"])
-        test_df  = pd.read_csv(paths["test"])
-
-        target = paths["target"]
-        feature_cols = [c for c in train_df.columns if c != target]
-
-        X_train = train_df[feature_cols].values
-        y_train = train_df[target].values
-        X_test  = test_df[feature_cols].values
-        y_test  = test_df[target].values
-
-        result = train_pool(X_train, y_train, X_test, dname)
-        info = save_artifacts(result, dname, y_train, y_test)
-        info["model_dir"] = result["model_dir"]
-        info["n_models"] = len(result["model_names"])
-        registry_data[dname] = (info, result)
-
-    save_pool_registry(
-        registry_data["finnish"][0], registry_data["maxwell"][0],
-        registry_data["finnish"][1], registry_data["maxwell"][1],
-    )
-
-    print("\n[T2] ✓ Pool de modelos gerado com sucesso!")
-    print(f"      Matrizes Gabarito em: ./{DATA_DIR}/")
-    print(f"      Modelos .joblib em:   ./{MODELS_DIR}/")
+def run_train_pool(verbose: bool = True) -> dict[str, dict]:
+    """Treina o pool em todas as bases disponíveis (via dataset_loader)."""
+    print("=" * 64)
+    print("  T2 — Pool de modelos base (individuais, sem ensembles)")
+    print("=" * 64)
+    splits = load_all(verbose=False)
+    results = {}
+    for name, s in splits.items():
+        r = train_pool(s["X_train"], s["y_train"], s["X_test"], name, verbose)
+        save_matrices(name, r)
+        results[name] = r
+    if results:
+        save_registry(results)
+    print("-" * 64)
+    print(f"[T2] ✓ pool treinado em {len(results)} base(s) "
+          f"({len(build_pool())} modelos) → matrizes em {OUT_DIR}/")
+    return results
 
 
 if __name__ == "__main__":
-    # Garante que T1 foi executado antes
-    if not os.path.exists(os.path.join(DATA_DIR, "finnish_train.csv")):
-        print("[T2] Dados de T1 não encontrados. Executando T1 primeiro...")
-        import sys
-        sys.path.insert(0, ".")
-        from dataset_loader import run_pipeline
-        run_pipeline()
-
     run_train_pool()

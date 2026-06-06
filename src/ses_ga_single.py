@@ -322,78 +322,37 @@ def run_ses_ga(pred_matrix_train: np.ndarray,
         }
     }
 
-
 # ─── Pipeline principal ──────────────────────────────────────────────────────
-def run_ses_ga_pipeline():
-    import pandas as pd
-    from train_pool import matrix_mock
+def _to_jsonable(obj):
+    if isinstance(obj, np.integer):
+        return int(obj)
+    if isinstance(obj, np.floating):
+        return float(obj)
+    if isinstance(obj, np.ndarray):
+        return obj.tolist()
+    return obj
+
+
+def run_ses_ga_pipeline(verbose: bool = True) -> dict:
+    """Roda o SES-GA mono-objetivo em todas as bases com pool treinado (T2)."""
+    from src.dataset_loader import datasets_with_pool, load_pool_arrays
 
     print("=" * 60)
-    print("  T3 — Algoritmo Genético SES-GA (Mono-objetivo: R²)")
+    print("  T3 — SES-GA mono-objetivo (maximiza R²)")
     print("=" * 60)
-
     os.makedirs(RESULTS_DIR, exist_ok=True)
 
-    datasets = ["finnish", "maxwell"]
-    all_results = {}
-
-    for dname in datasets:
-        print(f"\n{'─'*50}")
-        print(f"  Dataset: {dname.upper()}")
-        print(f"{'─'*50}")
-
-        # Tenta carregar matrizes reais de T2; usa mock se não existirem
-        train_path = os.path.join("data", f"{dname}_pred_matrix_train.npy")
-        test_path  = os.path.join("data", f"{dname}_pred_matrix_test.npy")
-        y_train_path = os.path.join("data", f"{dname}_y_train.npy")
-        y_test_path  = os.path.join("data", f"{dname}_y_test.npy")
-
-        if os.path.exists(train_path):
-            pred_train = np.load(train_path)
-            pred_test  = np.load(test_path)
-            y_train    = np.load(y_train_path)
-            y_test     = np.load(y_test_path)
-            print(f"  → Matrizes reais carregadas de T2.")
-        else:
-            # Mock: estrutura idêntica à real (autonomia conforme contrato)
-            n_train = 283 if dname == "finnish" else 43
-            n_test  = 122 if dname == "finnish" else 19
-            pred_train = matrix_mock(n_train)
-            pred_test  = matrix_mock(n_test, random_state=RANDOM_STATE + 99)
-            rng_t = np.random.default_rng(RANDOM_STATE)
-            y_train = rng_t.uniform(0, 1, size=n_train)
-            y_test  = rng_t.uniform(0, 1, size=n_test)
-            print(f"  → Usando matrizes MOCK (T2 ainda não executado).")
-
-        result = run_ses_ga(
-            pred_matrix_train=pred_train,
-            y_train=y_train,
-            pred_matrix_test=pred_test,
-            y_test=y_test,
-        )
-        all_results[dname] = result
-
-        # Salva resultado (converte tipos numpy para serializáveis)
-        def _to_serializable(obj):
-            if isinstance(obj, np.integer):
-                return int(obj)
-            if isinstance(obj, np.floating):
-                return float(obj)
-            if isinstance(obj, np.ndarray):
-                return obj.tolist()
-            return obj
-
-        import copy
-        result_clean = json.loads(
-            json.dumps(result, default=_to_serializable)
-        )
-        out_path = os.path.join(RESULTS_DIR, f"{dname}_ses_ga.json")
-        with open(out_path, "w") as f:
-            json.dump(result_clean, f, indent=2)
-        print(f"  → Resultado salvo: {out_path}")
-
-    print("\n[T3] ✓ SES-GA concluído para todos os datasets!")
-    return all_results
+    results = {}
+    for dname in datasets_with_pool():
+        pred_train, pred_test, y_train, y_test = load_pool_arrays(dname)
+        print(f"\n── {dname.upper()} ──")
+        res = run_ses_ga(pred_train, y_train, pred_test, y_test, verbose=verbose)
+        results[dname] = res
+        out = os.path.join(RESULTS_DIR, f"{dname}_ses_ga.json")
+        with open(out, "w", encoding="utf-8") as f:
+            json.dump(json.loads(json.dumps(res, default=_to_jsonable)), f, indent=2)
+    print(f"\n[T3] ✓ SES-GA em {len(results)} base(s) → {RESULTS_DIR}/")
+    return results
 
 
 if __name__ == "__main__":

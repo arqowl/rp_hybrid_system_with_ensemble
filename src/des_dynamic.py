@@ -10,7 +10,7 @@ Quando M entregar os dados reais, basta substituir os arrays.
 """
 
 import numpy as np
-from evaluator import evaluate_all
+from src.evaluator import evaluate_all
 
 
 class DynamicEnsembleSelector:

@@ -10,6 +10,7 @@ AUTONOMIA: roda com tabela de desempenho fictícia.
 Quando M entregar os resultados reais, substitua a tabela mock.
 """
 
+import os
 import numpy as np
 from scipy import stats
 from scipy.stats import friedmanchisquare
@@ -187,8 +188,9 @@ def plot_cd_diagram(friedman_result: dict, control_model: str,
     ax.set_yticks([])
     plt.tight_layout()
 
-    path = save_path or "outputs/cd_diagram.png"
-    plt.savefig(f"/home/claude/projeto_oes/{path}", dpi=150, bbox_inches='tight')
+    path = save_path or "results/cd_diagram.png"
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    plt.savefig(path, dpi=150, bbox_inches='tight')
     print(f"\n[PLOT] Diagrama salvo em: {path}")
     plt.close()
 
