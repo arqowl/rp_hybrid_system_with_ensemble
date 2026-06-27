@@ -221,8 +221,7 @@ __marimo__/
 data/
 zips/
 *.zip
-*.csv
-*.arff
+
 
 # Ignora caches do Python
 __pycache__/
