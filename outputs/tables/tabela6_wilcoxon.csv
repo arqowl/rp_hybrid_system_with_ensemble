@@ -1,0 +1,4 @@
+Model,Finnish_obt,Finnish_art,Maxwell_obt,Maxwell_art
+Static Ensemble Selection (SES),0.0015,0.236,0.3525,0.112
+Dynamic Ensemble Selection (DES),0.032,0.075,0.2753,0.056
+Omni Ensemble Selection (OES),0.006,0.004,0.3736,0.021

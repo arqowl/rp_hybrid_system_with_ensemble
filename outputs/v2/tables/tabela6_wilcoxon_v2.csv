@@ -1,0 +1,4 @@
+Model,Finnish_v2,Finnish_v1,Maxwell_v2,Maxwell_v1
+Static Ensemble Selection (SES),0.0895,0.0015,0.9843,0.3525
+Dynamic Ensemble Selection (DES),0.0588,0.032,0.5678,0.2753
+Omni Ensemble Selection (OES),0.0739,0.006,0.768,0.3736

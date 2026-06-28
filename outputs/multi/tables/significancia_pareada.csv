@@ -1,0 +1,25 @@
+Dataset,Categoria,Ranking_por_erro,Par,medErr_A,medErr_B,p,Rejeita_H0,Vencedor_H1
+finnish,SEE,SES > OES > DES,SES vs DES,936.8,1143.9,0.0434,sim,SES
+finnish,SEE,SES > OES > DES,SES vs OES,936.8,1071.5,0.2148,nao,empate
+finnish,SEE,SES > OES > DES,DES vs OES,1143.9,1071.5,0.0129,sim,OES
+maxwell,SEE,SES > DES > OES,SES vs DES,1310.9,1610.5,0.5153,nao,empate
+maxwell,SEE,SES > DES > OES,SES vs OES,1310.9,1890.6,0.6226,nao,empate
+maxwell,SEE,SES > DES > OES,DES vs OES,1610.5,1890.6,0.3321,nao,empate
+desharnais,SEE,DES > OES > SES,SES vs DES,1002.8,628.2,0.1875,nao,empate
+desharnais,SEE,DES > OES > SES,SES vs OES,1002.8,855.0,0.16,nao,empate
+desharnais,SEE,DES > OES > SES,DES vs OES,628.2,855.0,0.2768,nao,empate
+china,SEE,SES > OES > DES,SES vs DES,863.7,956.4,0.2687,nao,empate
+china,SEE,SES > OES > DES,SES vs OES,863.7,941.3,0.5716,nao,empate
+china,SEE,SES > OES > DES,DES vs OES,956.4,941.3,0.0409,sim,OES
+kitchenham,SEE,SES > OES > DES,SES vs DES,288.5,390.9,0.3751,nao,empate
+kitchenham,SEE,SES > OES > DES,SES vs OES,288.5,342.6,0.1518,nao,empate
+kitchenham,SEE,SES > OES > DES,DES vs OES,390.9,342.6,0.6535,nao,empate
+coc81,SEE,SES > DES > OES,SES vs DES,124.4,127.4,0.3321,nao,empate
+coc81,SEE,SES > DES > OES,SES vs OES,124.4,129.3,0.1688,nao,empate
+coc81,SEE,SES > DES > OES,DES vs OES,127.4,129.3,0.4413,nao,empate
+debutanizer,regressao generica (nao-SEE),DES > OES > SES,SES vs DES,0.024,0.022,0.0,sim,DES
+debutanizer,regressao generica (nao-SEE),DES > OES > SES,SES vs OES,0.024,0.023,0.0,sim,OES
+debutanizer,regressao generica (nao-SEE),DES > OES > SES,DES vs OES,0.022,0.023,0.0,sim,DES
+abalone,regressao generica (nao-SEE),SES > DES > OES,SES vs DES,1.075,1.092,0.2897,nao,empate
+abalone,regressao generica (nao-SEE),SES > DES > OES,SES vs OES,1.075,1.092,0.5031,nao,empate
+abalone,regressao generica (nao-SEE),SES > DES > OES,DES vs OES,1.092,1.092,0.0039,sim,DES

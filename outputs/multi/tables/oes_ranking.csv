@@ -1,0 +1,17 @@
+Dataset,Modo,OES_e_o_melhor_em,OES_rank_mediano,melhor_sMAPE,melhor_MRE,melhor_MASE,melhor_NSE,melhor_COD
+finnish,baseline,1/5 metricas,2,ET,Proposed,Static,ADA,ADA
+finnish,melhorado,0/5 metricas,10,ET,ADA,ET,ET,ET
+maxwell,baseline,0/5 metricas,5,BG,RF,CAT,CAT,BG
+maxwell,melhorado,0/5 metricas,5,MLP,MLP,MLP,MLP,LR
+desharnais,baseline,2/5 metricas,2,Proposed,Proposed,kNN,SVM,SVM
+desharnais,melhorado,0/5 metricas,3,DES,DES,DES,DES,DES
+china,baseline,0/5 metricas,4,DES,NB,DES,LR,LR
+china,melhorado,0/5 metricas,12,ET,NB,ET,BG,BG
+kitchenham,baseline,2/5 metricas,2,ET,BG,Proposed,Proposed,LR
+kitchenham,melhorado,1/5 metricas,10,ET,ET,ET,ET,Proposed
+coc81,baseline,0/5 metricas,4,Static,NB,Static,MLP,CAT
+coc81,melhorado,0/5 metricas,9,DT,DT,ADA,ADA,ADA
+debutanizer,baseline,0/5 metricas,3,ET,ET,ET,ET,ET
+debutanizer,melhorado,0/5 metricas,3,ET,MLP,ET,ET,ET
+abalone,baseline,1/5 metricas,2,Proposed,MLP,MLP,DES,MLP
+abalone,melhorado,1/5 metricas,2,XGB,XGB,Proposed,SVM,SVM
